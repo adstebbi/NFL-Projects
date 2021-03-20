@@ -15,25 +15,6 @@ NUM_TEAMS = 32
 #Avoid scientific notation for numbers
 options(scipen = 9999)
 
-#Obtain 2019 season (regular + post)
-data2K20 <- readRDS(url('https://raw.githubusercontent.com/guga31bb/nflfastR-data/master/data/play_by_play_2020.rds'))
-
-#Only look at non special-teams plays, with a valid EPA
-no_sp_full_epa <- data2K20 %>%
-  filter(!is.na(epa), special == 0)
-
-#Figure out win probability calculation for win probability being between .05 < WP < 0.95 to eliminate garbage time points
-#Filter for downs 1,2,3,4
-
-new_dataset <- no_sp_full_epa %>%
-  filter(wp > 0.05 & wp < 0.95, 
-         down == 1 |
-           down == 2 |
-           down == 3 |
-           down == 4)
-
-#Season Week Home_Team Away_Team Home_season_EPA_avg Home_win Winning_team Losing_team Away_season_EPA_avg Home_avg_mrg_victory Away_avg_mrg_victory Home_season_winning_Percentage Away_season_winning_percentage
-
 data2K10 <- readRDS(url('https://raw.githubusercontent.com/guga31bb/nflfastR-data/master/data/play_by_play_2010.rds'))
 
 #Apply modern names to dated teams
@@ -90,6 +71,9 @@ avg_margin_of_victory <- log_reg_model_data10 %>%
 #Now we have offensive epa per team, defensive EPA per team, average margin of victory per team, 
 #just need home WP and away WP
 
+one_row_per_game_overall <- log_reg_model_data10 %>%
+                              subset(!duplicated(game_id))
+
 one_row_per_game_home <- log_reg_model_data10 %>%
                           subset(!duplicated(game_id)) %>%
                             group_by(home_team) %>%
@@ -108,39 +92,39 @@ team_home_and_away_WP <- full_join(one_row_per_game_home,
 team_home_and_away_WP$home_WP <- round((team_home_and_away_WP$home_wins / team_home_and_away_WP$total_home_games),2)
 team_home_and_away_WP$away_WP <- round((team_home_and_away_WP$away_wins / team_home_and_away_WP$total_away_games),2)
 
-                                
+team_home_and_away_WP <- team_home_and_away_WP %>%
+                          mutate(team = home_team) %>%
+                           select(team, home_WP, away_WP)
                               
-# 
-#                         
-# home_winning_percentage = sum(winning_team == home_team) / 
-#   (names(table(winning_team)) == home_team)
-# 
-#  
-#                         
-# home_and_away_WP <- function(subsetted_data_frame, fill_data_frame){
-#   for(i in 1:nrow(subsetted_data_frame)){
-#     #Home Team calculations first
-#       current_team <- subsetted_data_frame[i, "home_team"]
-#       print(current_team)
-#       team_frequency <- sum(subsetted_data_frame$home_team == current_team)
-#       print(team_frequency)
-#       home_wins <- sum(subsetted_data_frame$winning_team == current_team)
-#       print(home_wins)
-#       fill_data_frame$winning_team <- current_team
-#       fill_data_frame$home_wp <- home_wins / team_frequency
-#     
-#     #Away Team calculations next
-#       current_team <- subsetted_data_frame[i, "away_team"]
-#       team_frequency <- sum(subsetted_data_frame$away_team == current_team)
-#       away_wins <- sum(subsetted_data_frame$winning_team == current_team)
-#       fill_data_frame$winning_team <- current_team
-#       fill_data_frame$away_wp <- away_wins / team_frequency
-#   }
-}
 
-home_WP <- data.frame()
 
-home_and_away_WP(one_row_per_game, home_WP)
+#Now need to create a master DF that contains all needed columns 
+
+#Season Week Home_Team Away_Team Home_season_EPA_avg Home_win 
+#Winning_team Losing_team Away_season_EPA_avg 
+#Home_avg_mrg_victory Away_avg_mrg_victory 
+#Home_season_winning_Percentage Away_season_winning_percentage
+
+#Little Regex refresher & practice
+one_row_per_game_overall$season <- str_extract(one_row_per_game_overall$game_id, '^[0-9]{4}')
+one_row_per_game_overall$week <- substr(str_extract(one_row_per_game_overall$game_id, '_[01-12]{2}'),2,3)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
