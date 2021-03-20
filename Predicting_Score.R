@@ -116,11 +116,11 @@ plot(home_fit)
 plot(away_fit)
 
 
-#Training and Testing datasets from the 2020 Season 
+#Training and Testing datasets from the 2018 Season 
 set.seed(1)
-row.number <- sample(1:nrow(Boston), 0.8*nrow(Boston))
-train = Boston[row.number,]
-test = Boston[-row.number,]
+row.number <- sample(1:nrow(home_results), 0.8*nrow(home_results))
+home_train <- home_results[row.number,]
+home_test <- home_results[-row.number,]
 
 
 pred1 <- predict(model4, newdata = test)

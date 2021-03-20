@@ -6,6 +6,8 @@ library(nflfastR)
 library(readr)
 library(XML)
 library(ggplot2)
+library(Metrics)
+library(sjmisc)
 
 generate_data_for_modeling <- function(season){
   Full_Regular_Season <- readRDS(
@@ -90,14 +92,73 @@ generate_data_for_modeling <- function(season){
 }
 
 #Set the season here
-season <- 2020
+season <- "2018"
 All_season <- generate_data_for_modeling(season)
 
 #Do not attempt to set variables 
-if(dim(All_season) == NULL) {
+if(length(All_season) == 2) {
   home_results <- All_season[[1]]
   away_results <- All_season[[2]]
 }
+
+#Finally, generate a linear model predicting home score and away score
+# home_fit <- lm(home_score ~ 
+#                  off_epa_play + off_total_epa + 
+#                  explosive_play_rate + bad_play_rate, 
+#                data = home_results)
+# 
+# home_preds <- predict(home_fit, home_results) %>%
+#               as_tibble() %>%
+#               rename(home_prediction = value) %>%
+#               round(1) %>%
+#               bind_cols(home_results) %>%
+#               select(game_id, season, week, home_team, home_prediction, home_score, off_epa_play) %>%
+#               mutate(prediction_minus_actual = home_prediction - home_score)
+# 
+# away_fit <- lm(away_score ~ 
+#                  off_epa_play + off_total_epa + 
+#                  explosive_play_rate + bad_play_rate, 
+#                data = away_results)
+# 
+# away_preds <- predict(away_fit, away_results) %>%
+#               as_tibble() %>%
+#               rename(away_prediction = value) %>%
+#               round(1) %>%
+#               bind_cols(away_results) %>%
+#               select(game_id, season, week, away_team, away_prediction, away_score, off_epa_play) %>%
+#               mutate(prediction_minus_actual = away_prediction - away_score)
+
+#Training and Testing datasets from the 2018 Season 
+set.seed(1)
+row.number <- sample(1:nrow(home_results), 0.8*nrow(home_results))
+home_train <- home_results[row.number,]
+home_test <- home_results[-row.number,]
+
+home_model <- lm(home_score ~ 
+                   off_epa_play + off_total_epa + 
+                   explosive_play_rate + bad_play_rate, 
+                 data = home_train)
+
+home_predictions <- predict(home_model, newdata = home_test)
+rmse <- rmse(home_test$home_score, home_predictions)
+R_squared <- cor(home_test$home_score, home_predictions)^2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
