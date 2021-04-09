@@ -116,16 +116,3 @@ plot(home_fit)
 plot(away_fit)
 
 
-#Training and Testing datasets from the 2018 Season 
-set.seed(1)
-row.number <- sample(1:nrow(home_results), 0.8*nrow(home_results))
-home_train <- home_results[row.number,]
-home_test <- home_results[-row.number,]
-
-
-pred1 <- predict(model4, newdata = test)
-rmse <- sqrt(sum((exp(pred1) - test$medv)^2)/length(test$medv))
-c(RMSE = rmse, R2=summary(model4)$r.squared)
-
-
-

@@ -3,7 +3,7 @@ library("tidyverse")
 library("rlist")
 
 scrape_weekly_games <- function(){
-  #Pull in weekly matchup from Team Rankings website
+  #Pull in weekly matchup from Team Rankings website, set the week number HERE
   simple <- read_html('https://www.teamrankings.com/nfl-odds-week-10')
   
   #HTML container that holds team names is <a> </a>
