@@ -8,6 +8,12 @@ library(XML)
 library(ggplot2)
 library(Metrics)
 
+## Current State Description (4/17/2021):
+# Use code from Predicting_Score and place into function to work for any season
+# Train and test the models for the desired season, observing RMSE and R^2
+
+
+
 generate_data_for_modeling <- function(season){
   Full_Regular_Season <- readRDS(
                 url(

@@ -7,6 +7,17 @@ library(readr)
 library(XML)
 library(ggplot2)
 
+## Current State Description (4/17/2021):
+# 
+# -Reads only 2019 plays, filtering to clean up
+# -Graph & investigate the distribution of home and away scores for that season 
+# -Split stats into offense and defense dataframes, using summary variables
+# that will be used as x values for the score prediction model
+# -After cleaning and creating singular models for offense and defense, separate 
+# results into combinations of offense and defense, home and away
+# -Create home & away models, home & away predictions
+# -View models to determine if proper conditions are met to model a normal distribution
+
 All_2019 <- readRDS(url("https://raw.githubusercontent.com/guga31bb/nflfastR-data/master/data/play_by_play_2019.rds")) %>%
             filter(rush == 1 | pass == 1, week <= 17, !is.na(epa), !is.na(posteam), posteam != "")
 
@@ -26,7 +37,7 @@ summary(All_2019_Scores$home_score)
 summary(All_2019_Scores$away_score)
 summary(All_2019_Scores$total)
 
-#Build Explanatoru Variables for Model predicting Home and Away Score
+#Build Explanatory Variables for Model predicting Home and Away Score
 offense_2019 <- All_2019 %>%
                 group_by(game_id, posteam, season, week) %>% 
                 summarize(plays = n(),
@@ -100,12 +111,12 @@ away_fit <- lm(away_score ~
                  bad_play_rate, data = away_results)
 
 away_preds <- predict(away_fit, away_results) %>%
-  as_tibble() %>%
-  rename(away_prediction = value) %>%
-  round(1) %>%
-  bind_cols(away_results) %>%
-  select(game_id, season, week, away_team, away_prediction, away_score, off_epa_play) %>%
-  mutate(prediction_minus_actual = away_prediction - away_score)
+              as_tibble() %>%
+              rename(away_prediction = value) %>%
+              round(1) %>%
+              bind_cols(away_results) %>%
+              select(game_id, season, week, away_team, away_prediction, away_score, off_epa_play) %>%
+              mutate(prediction_minus_actual = away_prediction - away_score)
 
 #Check assumptions to make sure a linear model is appropriate
 #Residual v Fitted (No distinguishable pattern), QQ Plot follows the dashed line 
