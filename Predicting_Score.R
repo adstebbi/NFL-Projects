@@ -9,7 +9,7 @@ library(ggplot2)
 
 ## Current State Description (4/17/2021):
 # 
-# -Reads only 2019 plays, filtering to clean up
+# -Reads only 2019 plays, filters to clean up
 # -Graph & investigate the distribution of home and away scores for that season 
 # -Split stats into offense and defense dataframes, using summary variables
 # that will be used as x values for the score prediction model
