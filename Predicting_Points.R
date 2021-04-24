@@ -8,9 +8,10 @@ library(XML)
 library(ggplot2)
 library(Metrics)
 
-## Current State Description (4/17/2021):
+## Current State Description (4/24/2021):
 # Use code from Predicting_Score and place into function to work for any season
 # Train and test the models for the desired season, observing RMSE and R^2
+# Accuracy for spread and game totals, also generated visualizations 
 
 generate_data_for_modeling <- function(season){
   Full_Regular_Season <- readRDS(
@@ -164,11 +165,6 @@ away_predictions <- predict(away_model, newdata = away_test)
 away_rmse <- rmse(away_test$away_score, away_predictions)
 away_R_squared <- cor(away_test$away_score, away_predictions)^2
 
-# Visualize Prediction Accuracy 
-# ggplot(data = home_preds, aes(game_id, prediction_minus_actual)) +
-#   geom_col() +
-#     geom_hline(yintercept = mean(abs(home_preds$prediction_minus_actual)), color="blue")
-
 #Build full models from the entire dataset, then make predictions using the newly created models
 home_fit <- lm(home_score ~ 
                  off_epa_play + off_total_epa +
@@ -202,9 +198,7 @@ away_preds <- predict(away_fit, away_results) %>%
               select(game_id, season, week, away_team, away_prediction, away_score, off_epa_play) %>%
               mutate(prediction_minus_actual = away_prediction - away_score)
 
-home_preds
-away_preds
-
+#Average number of points the prediction is off by
 mean(abs(home_preds$prediction_minus_actual))
 mean(abs(away_preds$prediction_minus_actual))
 
@@ -222,17 +216,13 @@ compare_df <- data.frame(game_id = home_preds$game_id,
 compare_df$predicted_total <- compare_df$home_prediction + compare_df$away_prediction
 compare_df$predicted_spread <- compare_df$home_prediction - compare_df$away_prediction
 
+#Create column because graphing with game_id is too many unique values for an x-axis to generate
+compare_df$numeric_game_ID <- seq.int(nrow(compare_df))
+
 #Columns created in order to calculate if the home team covered the spread
 compare_df$positive_spread <- ifelse(compare_df$vegas_spread > 0, TRUE, FALSE)
 compare_df$home_result_greater_than_spread <- ifelse(compare_df$result > compare_df$vegas_spread, TRUE, FALSE)
-
 compare_df$correct_spread <- ifelse(compare_df$predicted_spread > compare_df$vegas_spread, TRUE, FALSE)
-
-#Calculate how many spreads were correctly predicted using this model 
-compare_df %>% summarize(n = n(), true = sum(compare_df$correct_spread == TRUE), accuracy = true / n)
-
-#Create column because graphing with game_id is too many unique values for an x-axis to generate
-compare_df$numeric_game_ID <- seq.int(nrow(compare_df))
 
 #Plot predicted spread v actual spread v vegas
 ggplot(data = compare_df, mapping = aes(x = numeric_game_ID)) +
@@ -246,12 +236,13 @@ ggplot(data = compare_df, mapping = aes(x = numeric_game_ID)) +
         labs(x = "Game Number", y = "Spread", color = "Spreads") +
         ggtitle("Real Spread vs Vegas Spread vs Predicted Spread")
 
+#Calculate how many spreads were correctly predicted using this model 
+compare_df %>% summarize(n = n(), true = sum(compare_df$correct_spread == TRUE), accuracy = true / n)
+
 #Calculate how many overs were correctly picked 
 compare_df$real_over_hit <- ifelse(compare_df$game_total > compare_df$vegas_total, TRUE, FALSE)
 compare_df$predict_over_hit <- ifelse(compare_df$predicted_total > compare_df$vegas_total, TRUE, FALSE)
-
 compare_df$correct_over_under <- ifelse(compare_df$real_over_hit == compare_df$predict_over_hit, TRUE, FALSE)
-
 
 #Plot predicted total v actual total v vegas
 ggplot(data = compare_df, mapping = aes(x = numeric_game_ID)) +
@@ -267,10 +258,5 @@ ggplot(data = compare_df, mapping = aes(x = numeric_game_ID)) +
 
 #Calculate how many over/unders were correctly predicted using this model 
 compare_df %>% summarize(n = n(), true = sum(compare_df$correct_over_under == TRUE), accuracy = true / n)
-
-
-
-
-
 
 
