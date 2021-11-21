@@ -4,126 +4,151 @@ library(ggrepel)
 library(ggimage)
 library(nflfastR)
 library(readr)
-library(XML)
+library(xml2)
 library(ggplot2)
 library(Metrics)
 library(textreadr)
 library(rvest)
 library(gt)
+library(sjmisc)
+library(R.utils)
+library(janitor)
+library(XML)
 
-## Current State Description (10/8/2021):
+## Current State Description (10/16/2021):
 # Games for given week are properly scraped from team rankings website and placed into "weekly_matchup" DF
 # Data for entire given season is generated, cleaned, and organized into required home & away DFs with proper stats
 # Models are generated for home and away teams in upcoming matchups, and their scores are predicted using the available data
 # up to this point. gt() is used to create a table to display this information in a consumable fashion
+NFL_Teams <- c("Miami", "Baltimore", "Pittsburgh", "Minnesota", "NY Jets", "Dallas", "Atlanta", 
+               "Green Bay", "Las Vegas", "Jacksonville", "LA Chargers", "Arizona", "Seattle", 
+               "New Orleans", "Tennessee", "Washington", "Buffalo", "Cincinnati", "Cleveland", 
+               "Detroit", "New England", "NY Giants", "Tampa Bay", "Chicago", "Denver", 
+               "Indianapolis", "Kansas City", "LA Rams", "San Francisco", "Carolina", "Houston", 
+               "Philadelphia")
 
-scrape_weekly_games <- function(week_num){
+Mascots <- c('Cardinals', 'Falcons', 'Ravens','Bills','Panthers','Bears','Bengals',
+             'Browns','Cowboys','Broncos','Lions','Packers','Texans','Colts',
+              'Jaguars','Chiefs','Raiders','Chargers','Rams','Dolphins','Vikings',
+             'Patriots','Saints','Giants','Jets','Eagles','Steelers','49ers','Seahawks',
+             'Buccaneers','Titans','Washington')
+
+
+official_team_names <- c('Arizona Cardinals', 'Atlanta Falcons', "Baltimore Ravens", 'Buffalo Bills', 'Carolina Panthers',
+                         'Chicago Bears', 'Cincinnati Bengals', 'Cleveland Browns', 'Denver Broncos', 'Dallas Cowboys',
+                         'Detroit Lions', 'Green Bay Packers', 'Houston Texans', "Indianapolis Colts", "Jacksonville Jaguars", 
+                         'Kansas City Chiefs', 'Las Vegas Raiders', 'Los Angeles Chargers', 'Los Angeles Rams', 'Miami Dolphins',  
+                         'Minnesota Vikings','New England Patriots', 'New Orleans Saints', 'New York Giants', 'Philadelphia Eagles',
+                         'New York Jets', 'Pittsburgh Steelers', 'San Francisco 49ers', 'Seattle Seahawks', 'Tampa Bay Buccaneers', 
+                          'Tennessee Titans', 'Washington Football Team')
+
+
+
+
+
+scrape_weekly_games <- function(season, week_num){
   
-  week_num <- 2
-  correct_url <- paste0("https://www.teamrankings.com/nfl-odds-week-", week_num)
+  url <- paste0("https://www.pro-football-reference.com/years/", 2021, "/games.htm") #Pull full season's games from ProFootballReference
   
-  #Pull in weekly matchup from Team Rankings website
-  simple <- read_html(correct_url)
+  schedule <- read_html(url) %>%  
+                html_nodes("table#games") %>% 
+                html_table() %>% 
+                .[[1]] %>%
+                as.data.frame(.) #Scrape the table in order to get all future matchups
   
-  #HTML container that holds team names is <a> </a>
-  simple_a <- simple %>%
-    html_nodes("a") %>%
-    html_text()
+  class(schedule) #Make sure the data frame is populated and the correct structure
+  rownames(schedule) <- NULL #Remove the duplicate row names by setting all to NULL
   
-  NFL_Teams <- c("Miami", "Baltimore", "Pittsburgh", "Minnesota", "NY Jets", "Dallas", "Atlanta", 
-                 "Green Bay", "Las Vegas", "Jacksonville", "LA Chargers", "Arizona", "Seattle", 
-                 "New Orleans", "Tennessee", "Washington", "Buffalo", "Cincinnati", "Cleveland", 
-                 "Detroit", "New England", "NY Giants", "Tampa Bay", "Chicago", "Denver", 
-                 "Indianapolis", "Kansas City", "LA Rams", "San Francisco", "Carolina", "Houston", 
-                 "Philadelphia")
-  
-  
-  #Get list of matchups by matching the characters that align between NFL_Teams and simple_a
-  all_teams_in_order <- c()
-  j <- 1
-  length_simple_a <- length(simple_a)
-  
-  for(i in 1:length_simple_a) {
-    if(grepl("@", simple_a[[i]], fixed = TRUE)){ #pull out the strings that contain the matchups 
-      
-      teams <- str_split(simple_a[[i]], " @ ")[[1]] #Find all matchups from the html
-      
-      if(teams[1] %in% NFL_Teams){
-        all_teams_in_order[[j]] <- teams[[1]] #Separate the teams within the strings, and keep them in order
-        j <- j + 1
-        all_teams_in_order[[j]] <- teams[[2]]
-        j <- j + 1
-      }
-    }
-    else if(grepl("vs.", simple_a[[i]], fixed = TRUE)){
-      teams <- str_split(simple_a[[i]], " vs. ")[[1]]
-      
-      if(teams[1] %in% NFL_Teams){
-        all_teams_in_order[[j]] <- teams[[1]] #Separate the teams within the strings, and keep them in order
-        j <- j + 1
-        all_teams_in_order[[j]] <- teams[[2]]
-        j <- j + 1
-      }
-    }
-  }
-  
-  ##CURRENT ISSUE, not capturing NY Jets vs. Atlanta because it uses vs. instead of @ symbol due to a neutral field.
-  ################################ FIX ME ########################################################
-  
-  all_teams_in_order <- unique(all_teams_in_order) #Remove duplicates
-  all_teams_in_order <- all_teams_in_order[all_teams_in_order %in% NFL_Teams] #Make sure only NFL teams were collected
-  
-  all_teams_abbrv <- c()
+  schedule <- unique(schedule) #Remove unnecessary header lines
+  week_num_matchups <- schedule[schedule$Week == week_num,] #Filter to the desired week's matchups
   
   #Change from names to abbreviations for ease of use
   
-    for (i in 1:length(all_teams_in_order)){
-      all_teams_abbrv[[i]] <- case_when(
-                                all_teams_in_order[[i]] == "Arizona" ~ "ARI",
-                                all_teams_in_order[[i]] == "Atlanta" ~ "ATL",
-                                all_teams_in_order[[i]] == "Baltimore" ~ "BAL",
-                                all_teams_in_order[[i]] == "Buffalo" ~ "BUF",
-                                all_teams_in_order[[i]] == "Carolina" ~ "CAR",
-                                all_teams_in_order[[i]] == "Chicago" ~ "CHI",
-                                all_teams_in_order[[i]] == "Cincinnati" ~ "CIN",
-                                all_teams_in_order[[i]] == "Cleveland" ~ "CLE",
-                                all_teams_in_order[[i]] == "Dallas" ~ "DAL",
-                                all_teams_in_order[[i]] == "Denver" ~ "DEN",
-                                all_teams_in_order[[i]] == "Detroit" ~ "DET",
-                                all_teams_in_order[[i]] == "Green Bay" ~ "GB",
-                                all_teams_in_order[[i]] == "Houston" ~ "HOU",
-                                all_teams_in_order[[i]] == "Indianapolis" ~ "IND",
-                                all_teams_in_order[[i]] == "Jacksonville" ~ "JAX",
-                                all_teams_in_order[[i]] == "Kansas City" ~ "KC",
-                                all_teams_in_order[[i]] == "Miami" ~ "MIA",
-                                all_teams_in_order[[i]] == "Minnesota" ~ "MIN",
-                                all_teams_in_order[[i]] == "New England" ~ "NE",
-                                all_teams_in_order[[i]] == "New Orleans" ~ "NO",
-                                all_teams_in_order[[i]] == "NY Giants" ~ "NYG",
-                                all_teams_in_order[[i]] == "NY Jets" ~ "NYJ",
-                                all_teams_in_order[[i]] == "Las Vegas" ~ "LV",
-                                all_teams_in_order[[i]] == "Philadelphia" ~ "PHI",
-                                all_teams_in_order[[i]] == "Pittsburgh" ~ "PIT",
-                                all_teams_in_order[[i]] == "LA Chargers" ~ "LAC",
-                                all_teams_in_order[[i]] == "San Francisco" ~ "SF",
-                                all_teams_in_order[[i]] == "Seattle" ~ "SEA",
-                                all_teams_in_order[[i]] == "LA Rams" ~ "LA",
-                                all_teams_in_order[[i]] == "Tampa Bay" ~ "TB",
-                                all_teams_in_order[[i]] == "Tennessee" ~ "TEN",
-                                all_teams_in_order[[i]] == "Washington" ~ "WAS"
-                          ) 
-      }
+    for (i in 1:length(week_num_matchups)){
+      week_num_matchups$home_team_abbv[i] <- case_when(
+                                                       week_num_matchups$`Loser/tie`[i] == 'Arizona Cardinals'         ~ "ARI",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Atlanta Falcons'          ~ "ATL",
+                                                        week_num_matchups$`Loser/tie`[i] == "Baltimore Ravens"         ~ "BAL",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Buffalo Bills'            ~ "BUF",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Carolina Panthers'        ~ "CAR",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Chicago Bears'            ~ "CHI",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Cincinnati Bengals'       ~ "CIN",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Cleveland Browns'         ~ "CLE",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Denver Broncos'           ~ "DEN",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Dallas Cowboys'           ~ "DAL",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Detroit Lions'            ~ "DET",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Green Bay Packers'        ~ "GB",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Houston Texans'           ~ "HOU",
+                                                        week_num_matchups$`Loser/tie`[i] == "Indianapolis Colts"       ~ "IND",
+                                                        week_num_matchups$`Loser/tie`[i] == "Jacksonville Jaguars"     ~ "JAX",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Kansas City Chiefs'       ~ "KC",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Las Vegas Raiders'        ~ "LV",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Los Angeles Chargers'     ~ "LAC",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Los Angeles Rams'         ~ "LAR",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Miami Dolphins'           ~ "MIA",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Minnesota Vikings'        ~ "MIN",
+                                                        week_num_matchups$`Loser/tie`[i] == 'New England Patriots'     ~ "NE",
+                                                        week_num_matchups$`Loser/tie`[i] == 'New Orleans Saints'       ~ "NO",
+                                                        week_num_matchups$`Loser/tie`[i] == 'New York Giants'          ~ "NYG",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Philadelphia Eagles'      ~ "PHI",
+                                                        week_num_matchups$`Loser/tie`[i] == 'New York Jets'            ~ "NYJ",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Pittsburgh Steelers'      ~ "PIT",
+                                                        week_num_matchups$`Loser/tie`[i] == 'San Francisco 49ers'      ~ "SF",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Seattle Seahawks'         ~ "SEA",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Tampa Bay Buccaneers'     ~ "TB",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Tennessee Titans'         ~ "TEN",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Washington Football Team' ~ "WAS"
+        
+                              )
+      
+      week_num_matchups$away_team_abbv[i] <- case_when(
+                                                       week_num_matchups$`Winner/tie`[i] == 'Arizona Cardinals'        ~ "ARI",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Atlanta Falcons'          ~ "ATL",
+                                                       week_num_matchups$`Winner/tie`[i] == "Baltimore Ravens"         ~ "BAL",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Buffalo Bills'            ~ "BUF",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Carolina Panthers'        ~ "CAR",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Chicago Bears'            ~ "CHI",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Cincinnati Bengals'       ~ "CIN",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Cleveland Browns'         ~ "CLE",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Denver Broncos'           ~ "DEN",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Dallas Cowboys'           ~ "DAL",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Detroit Lions'            ~ "DET",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Green Bay Packers'        ~ "GB",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Houston Texans'           ~ "HOU",
+                                                       week_num_matchups$`Winner/tie`[i] == "Indianapolis Colts"       ~ "IND",
+                                                       week_num_matchups$`Winner/tie`[i] == "Jacksonville Jaguars"     ~ "JAX",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Kansas City Chiefs'       ~ "KC",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Las Vegas Raiders'        ~ "LV",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Los Angeles Chargers'     ~ "LAC",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Los Angeles Rams'         ~ "LAR",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Miami Dolphins'           ~ "MIA",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Minnesota Vikings'        ~ "MIN",
+                                                       week_num_matchups$`Winner/tie`[i] == 'New England Patriots'     ~ "NE",
+                                                       week_num_matchups$`Winner/tie`[i] == 'New Orleans Saints'       ~ "NO",
+                                                       week_num_matchups$`Winner/tie`[i] == 'New York Giants'          ~ "NYG",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Philadelphia Eagles'      ~ "PHI",
+                                                       week_num_matchups$`Winner/tie`[i] == 'New York Jets'            ~ "NYJ",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Pittsburgh Steelers'      ~ "PIT",
+                                                       week_num_matchups$`Winner/tie`[i] == 'San Francisco 49ers'      ~ "SF",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Seattle Seahawks'         ~ "SEA",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Tampa Bay Buccaneers'     ~ "TB",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Tennessee Titans'         ~ "TEN",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Washington Football Team' ~ "WAS"
+                                                       
+              )
+    }
 
-  return(all_teams_abbrv)
+  return(week_num_matchups)
 }
 
-generate_data_for_modeling <- function(season){
+generate_data_for_modeling <- function(season, week_num){
+  
   Full_Regular_Season <- readRDS(
     url(
       paste0("https://raw.githubusercontent.com/guga31bb/nflfastR-data/master/data/play_by_play_",season,".rds")
     )
   ) %>%
-    filter(rush == 1 | pass == 1, week <= 17, !is.na(epa), !is.na(posteam), posteam != "")
+    filter(rush == 1 | pass == 1, week <= week_num, !is.na(epa), !is.na(posteam), posteam != "")
   
   #Explore the season's distribution of points (Overall, Home, and Away)
   Full_Regular_Season_Scores <- Full_Regular_Season %>% 
@@ -141,7 +166,14 @@ generate_data_for_modeling <- function(season){
   summary(Full_Regular_Season_Scores$away_score)
   summary(Full_Regular_Season_Scores$total)
   
-  #Build Explanatoru Variables for Model predicting Home and Away Score
+  colnames(Full_Regular_Season)
+  
+  
+  Full_Regular_Season$def_final_score <- ifelse(Full_Regular_Season$home_team == Full_Regular_Season$defteam, 
+                                                Full_Regular_Season$away_score, 
+                                                Full_Regular_Season$home_score) #new
+  
+  #Build Explanatory Variables for Model predicting Home and Away Score
   full_offense <- Full_Regular_Season %>%
                   group_by(game_id, posteam, season, week) %>% 
                   summarize(plays = n(),
@@ -183,6 +215,7 @@ generate_data_for_modeling <- function(season){
                             spread_line = spread_line,
                             total = total,
                             result = result,
+                            opponent_ppg = mean(def_final_score), #new
                             home_team = home_team,
                             away_team = away_team)
   #Clean up
@@ -201,6 +234,7 @@ generate_data_for_modeling <- function(season){
   home_results <- home_full_offense
   home_results$def_good_play_rate <- home_full_defense$def_good_play_rate
   home_results$def_bad_play_rate <- home_full_defense$def_bad_play_rate
+  home_results$opponent_ppg <- home_full_defense$opponent_ppg #new
   
   #Clean up NAs
   home_full_defense$def_interceptions[is.na(home_full_defense$def_interceptions)] <- 0
@@ -212,6 +246,7 @@ generate_data_for_modeling <- function(season){
   away_results <- away_full_offense
   away_results$def_good_play_rate <- away_full_defense$def_good_play_rate
   away_results$def_bad_play_rate <- away_full_defense$def_bad_play_rate
+  away_results$opponent_ppg <- away_full_defense$opponent_ppg #new
   
   #Clean up NAs
   away_full_defense$def_interceptions[is.na(away_full_defense$def_interceptions)] <- 0
@@ -225,9 +260,10 @@ generate_data_for_modeling <- function(season){
 
 ## End of function
 
-#Set the season here
+#Set the season, week number to predict here
 season <- "2021"
-All_season <- generate_data_for_modeling(season)
+week_number <- 11
+All_season <- generate_data_for_modeling(season, week_number)
 
 #Do not attempt to set variables for inaccurately generated datasets
 if(length(All_season) == 2) {
@@ -239,18 +275,14 @@ if(length(All_season) == 2) {
 
 full_stats <- full_join(away_results, home_results) 
 
-#SET DESIRED WEEK NUMBER HERE
-week_number <- 5
-teams <- scrape_weekly_games(week_number)
+teams <- scrape_weekly_games(season, week_number)
 
-odds <- seq(1, length(teams), 2)
-evens <- seq(2, length(teams), 2)
-away_teams <- teams[odds]
-home_teams <- teams[evens]
+away_teams <- teams$away_team_abbv
+home_teams <- teams$home_team_abbv
 
 #Get this week's games and teams
 weekly_matchup <- tibble(Home_Team = home_teams,
-                             Away_Team = away_teams)
+                             Away_Team = away_teams) %>% unique()
 
 #Create DF to use to calculate averages for each team that will generate 
 #the numbers used in the testing data
@@ -258,7 +290,7 @@ all_results <- full_join(home_results, away_results)
 
 final_summary <- all_results %>%
                   group_by(posteam) %>%
-                    na.omit %>%
+                    #na.omit %>%
                       summarise(Team = posteam,
                                 off_epa_play = mean(off_epa_play),
                                 season = 2021,
@@ -271,6 +303,7 @@ final_summary <- all_results %>%
                                 avg_wpa = mean(avg_wpa),
                                 series_success = mean(series_success),
                                 cpoe = mean(cpoe),
+                                opponent_ppg = mean(opponent_ppg), #new
                                 avg_yardline = mean(avg_yardline),
                                 def_interceptions = sum(def_interceptions),
                                 def_fumbles = sum(def_fumbles),
@@ -278,6 +311,10 @@ final_summary <- all_results %>%
                                 def_bad_play_rate = mean(bad_play_rate),
                                 off_interceptions = sum(off_interceptions),
                                 off_fumbles = sum(off_fumbles))
+
+
+#Replace NA with zeros
+final_summary[is.na(final_summary)] <- 0
 
 #Build training dataset with summary data
 #Training and testing the home model using the data from the selected season
@@ -294,6 +331,7 @@ final_summary <- all_results %>%
                          off_success_rate = NA,
                          explosive_play_rate = NA, 
                          bad_play_rate = NA,
+                         opponent_ppg = NA, #new
                          avg_wpa = NA,
                          series_success = NA,
                          cpoe = NA,
@@ -321,7 +359,12 @@ final_summary <- all_results %>%
  
  #Build home test DF
  for(i in 1:nrow(weekly_matchup)){
-     created_game_id <- paste0("2021_01_", weekly_matchup$Away_Team[i], "_", weekly_matchup$Home_Team[i])
+     if(week_number < 10){
+       week_num <- paste0("0", week_number)
+     }else{
+       week_num <- week_number
+     }
+     created_game_id <- paste0("2021_", week_num, "_", weekly_matchup$Away_Team[i], "_", weekly_matchup$Home_Team[i])
      team_index <- which(final_summary$Team == weekly_matchup$Home_Team[i])
      
      home_test <- home_test %>% 
@@ -337,6 +380,7 @@ final_summary <- all_results %>%
                                 off_total_epa = final_summary$off_total_epa[team_index],
                                 explosive_play_rate = final_summary$explosive_play_rate[team_index],
                                 bad_play_rate = final_summary$bad_play_rate[team_index],
+                                opponent_ppg = final_summary$opponent_ppg[team_index], #new
                                 def_interceptions = final_summary$def_interceptions[team_index],
                                 def_fumbles = final_summary$def_fumbles[team_index],
                                 def_good_play_rate = final_summary$def_good_play_rate[team_index],
@@ -345,15 +389,17 @@ final_summary <- all_results %>%
                                 off_fumbles = final_summary$off_fumbles[team_index])
  }
  
- home_test <- home_test[-1, -30]
-
- # c("team", "off_epa_play", "off_total_epa", "explosive_play_rate",
- #   "bad_play_rate", "def_interceptions", "def_fumbles", "def_good_play_rate",
- #   "def_bad_play_rate", "off_interceptions", "off_fumbles", "home_score")
+ home_test <- home_test[-1, colnames(home_test) != "team"]
  
  # Build away test DF
  for(i in 1:nrow(weekly_matchup)){
-   created_game_id <- paste0("2021_01_", weekly_matchup$Away_Team[i], "_", weekly_matchup$Home_Team[i])
+   if(week_number < 10){
+     week_num <- paste0("0", week_number)
+   }else{
+     week_num <- week_number
+   }
+   
+   created_game_id <- paste0("2021_", week_num, "_", weekly_matchup$Away_Team[i], "_", weekly_matchup$Home_Team[i])
    team_index <- which(final_summary$Team == weekly_matchup$Away_Team[i])
    
    away_test <- away_test %>% 
@@ -369,6 +415,7 @@ final_summary <- all_results %>%
                          off_total_epa = final_summary$off_total_epa[team_index],
                          explosive_play_rate = final_summary$explosive_play_rate[team_index],
                          bad_play_rate = final_summary$bad_play_rate[team_index],
+                         opponent_ppg = final_summary$opponent_ppg[team_index], #new
                          def_interceptions = final_summary$def_interceptions[team_index],
                          def_fumbles = final_summary$def_fumbles[team_index],
                          def_good_play_rate = final_summary$def_good_play_rate[team_index],
@@ -377,7 +424,8 @@ final_summary <- all_results %>%
                          off_fumbles = final_summary$off_fumbles[team_index])
  }
  
- away_test <- away_test[-1, -30] #remove empty rows of NAs and "team" column
+#remove empty rows of NAs and "team" column
+away_test <- away_test[-1, colnames(away_test) != "team"]
 
 #Training and testing the home model using the data from the selected season
 home_model <- lm(home_score ~
@@ -385,12 +433,10 @@ home_model <- lm(home_score ~
                    explosive_play_rate + bad_play_rate + avg_wpa +
                    def_interceptions + def_fumbles + cpoe +
                    def_good_play_rate - def_bad_play_rate -
-                   off_interceptions - off_fumbles,
+                   off_interceptions - off_fumbles - opponent_ppg,
                  data = home_train)
 
 home_predictions <- predict(home_model, newdata = home_test)
-#home_rmse <- rmse(home_test$home_score, home_predictions)
-#home_R_squared <- cor(home_test$home_score, home_predictions)^2
 
 #Training and testing the away model using the data from the selected season
 away_model <- lm(away_score ~
@@ -398,32 +444,31 @@ away_model <- lm(away_score ~
                    explosive_play_rate + bad_play_rate + avg_wpa +
                    def_interceptions + def_fumbles + cpoe +
                    def_good_play_rate - def_bad_play_rate -
-                   off_interceptions - off_fumbles,
+                   off_interceptions - off_fumbles - opponent_ppg, #new
                  data = away_train)
 
 away_predictions <- predict(away_model, newdata = away_test)
-# away_rmse <- rmse(away_test$away_score, away_predictions)
-# away_R_squared <- cor(away_test$away_score, away_predictions)^2
-# 
+
 # #Build full models from the entire dataset, then make predictions using the newly created models
 home_fit <- lm(home_score ~
                  off_epa_play + off_total_epa + off_success_rate +
                  explosive_play_rate + bad_play_rate + avg_wpa +
                  def_interceptions + def_fumbles + cpoe +
                  def_good_play_rate - def_bad_play_rate -
-                 off_interceptions - off_fumbles,
+                 off_interceptions - off_fumbles - opponent_ppg, #new
                data = home_results)
 
 home_preds <- predict(home_fit, home_test) %>%
               as_tibble() %>%
               rename(home_prediction = value) %>%
+              mutate(home_prediction = home_prediction - 5) %>%
               round(1) %>%
               cbind(home_test) %>%
               select(posteam, game_id, plays, off_success_rate, season,
                      week, avg_wpa, cpoe, off_epa_play, off_total_epa,
                      explosive_play_rate, bad_play_rate, def_interceptions,
-                     def_fumbles, def_good_play_rate, def_bad_play_rate,
-                     off_interceptions, off_fumbles, home_prediction) 
+                     def_fumbles, def_good_play_rate, def_bad_play_rate, opponent_ppg, #new
+                     off_interceptions, off_fumbles, home_prediction)
 
 home_preds <- home_preds %>%
                rename(home_team = posteam)%>%
@@ -434,18 +479,19 @@ away_fit <- lm(away_score ~
                  explosive_play_rate + bad_play_rate + avg_wpa +
                  def_interceptions + def_fumbles + cpoe +
                  def_good_play_rate - def_bad_play_rate -
-                 off_interceptions - off_fumbles,
+                 off_interceptions - off_fumbles - opponent_ppg, #new
                data = away_results)
 
 away_preds <- predict(away_fit, away_test) %>%
               as_tibble() %>%
               rename(away_prediction = value) %>%
+              mutate(away_prediction = away_prediction - 5) %>%
               round(1) %>%
               bind_cols(away_test) %>%
               select(posteam, game_id, plays, off_success_rate, season,
                      week, avg_wpa, cpoe, off_epa_play, off_total_epa,
                      explosive_play_rate, bad_play_rate, def_interceptions,
-                     def_fumbles, def_good_play_rate, def_bad_play_rate,
+                     def_fumbles, def_good_play_rate, def_bad_play_rate, opponent_ppg,
                      off_interceptions, off_fumbles, away_prediction) 
 
 away_preds <- away_preds %>%
@@ -454,7 +500,7 @@ away_preds <- away_preds %>%
 
 ############### VISUALIZE ######################################
 
-all_predictions <- merge(home_preds,away_preds,by="game_id")
+all_predictions <- full_join(home_preds, away_preds, by="game_id")
 
 
 all_predictions %>%
@@ -462,14 +508,14 @@ all_predictions %>%
   gt() %>% # Make a unique table
   tab_options(table.border.top.color = "white",
               row.striping.include_table_body = TRUE) %>% # Set top border color, along with if rows should be stripped or not
-  tab_header(title = md("Week 5 Predicted Scores (:")) %>% # Set title
+  tab_header(title = md(paste0("Week ", week_num, " Predicted Scores"))) %>% # Set title
   tab_source_note(source_note = "SOURCE: nflfastR")  %>% # Set footer
-  cols_label(team_logo_espn.x = "HOME LOGO",
+  cols_label(team_logo_espn.x = " ",
               home_team = "HOME TEAM",
               home_prediction = "PREDICTED HOME SCORE",
               away_prediction = "PREDICTED AWAY SCORE",
               away_team = "AWAY TEAM",
-              team_logo_espn.y = "AWAY LOGO") %>% # Set column names 
+              team_logo_espn.y = " ") %>% # Set column names 
   tab_style(style = list(
               cell_fill(color = "mediumseagreen"),
               cell_text(weight = "bold")),
@@ -501,65 +547,91 @@ all_predictions %>%
                     web_image(all_predictions$team_logo_espn.y)
                   }) #Insert logo image into team_logo_espn.y column
 
-# #Average number of points the prediction is off by
-# mean(abs(home_preds$prediction_minus_actual))
-# mean(abs(away_preds$prediction_minus_actual))
-#
-# #Use models to see how accurate point prediction would have been for each game
-# compare_df <- data.frame(game_id = home_preds$game_id,
-#                          home_team = home_preds$home_team,
-#                          home_prediction = home_preds$home_prediction,
-#                          away_team = away_preds$away_team,
-#                          away_prediction = away_preds$away_prediction,
-#                          vegas_total = home_preds$total_line,
-#                          vegas_spread = home_preds$spread_line,
-#                          result = home_preds$result,
-#                          game_total = home_preds$total)
-#
-# compare_df$predicted_total <- compare_df$home_prediction + compare_df$away_prediction
-# compare_df$predicted_spread <- compare_df$home_prediction - compare_df$away_prediction
-#
-# #Create column because graphing with game_id is too many unique values for an x-axis to generate
-# compare_df$numeric_game_ID <- seq.int(nrow(compare_df))
-#
-# #Columns created in order to calculate if the home team covered the spread
-# compare_df$positive_spread <- ifelse(compare_df$vegas_spread > 0, TRUE, FALSE)
-# compare_df$home_result_greater_than_spread <- ifelse(compare_df$result > compare_df$vegas_spread, TRUE, FALSE)
-# compare_df$correct_spread <- ifelse(compare_df$predicted_spread > compare_df$vegas_spread, TRUE, FALSE)
-#
-# #Plot predicted spread v actual spread v vegas
-# ggplot(data = compare_df, mapping = aes(x = numeric_game_ID)) +
-#   geom_line(aes(y=result, color="Result"), linetype="solid", size=0.5) +
-#   geom_line(aes(y=vegas_spread, color="Vegas"), linetype="solid", size=0.5) +
-#   geom_line(aes(y=predicted_spread, color="Predicted"), linetype="solid", size=0.5) +
-#   scale_color_manual(values = c(
-#     'Result' = 'darkblue',
-#     'Predicted' = 'darkorange',
-#     'Vegas' = 'darkred'))+
-#   labs(x = "Game Number", y = "Spread", color = "Spreads") +
-#   ggtitle("Real Spread vs Vegas Spread vs Predicted Spread")
-#
-# #Calculate how many spreads were correctly predicted using this model
-# compare_df %>% summarize(n = n(), true = sum(compare_df$correct_spread == TRUE), accuracy = true / n)
-#
-# #Calculate how many overs were correctly picked
-# compare_df$real_over_hit <- ifelse(compare_df$game_total > compare_df$vegas_total, TRUE, FALSE)
-# compare_df$predict_over_hit <- ifelse(compare_df$predicted_total > compare_df$vegas_total, TRUE, FALSE)
-# compare_df$correct_over_under <- ifelse(compare_df$real_over_hit == compare_df$predict_over_hit, TRUE, FALSE)
-#
-# #Plot predicted total v actual total v vegas
-# ggplot(data = compare_df, mapping = aes(x = numeric_game_ID)) +
-#   geom_line(aes(y=game_total, color="Result"), linetype="solid", size=0.5) +
-#   geom_line(aes(y=vegas_total, color="Vegas"), linetype="solid", size=0.5) +
-#   geom_line(aes(y=predicted_total, color="Predicted"), linetype="solid", size=0.5) +
-#   scale_color_manual(values = c(
-#     'Result' = 'darkblue',
-#     'Predicted' = 'darkorange',
-#     'Vegas' = 'darkred'))+
-#   labs(x = "Game Number", y = "Total", color = "Total") +
-#   ggtitle("Real Total vs Vegas Total vs Predicted Total")
-#
-# #Calculate how many over/unders were correctly predicted using this model
-# compare_df %>% summarize(n = n(), true = sum(compare_df$correct_over_under == TRUE), accuracy = true / n)
-#
-#
+#create a DF to filter the data down to the games that have been completed this week so far 
+season <- "2021"
+games_for_correct_week <- readRDS(url(paste0("https://raw.githubusercontent.com/guga31bb/nflfastR-data/master/data/play_by_play_",season,".rds"))) %>%
+                          filter(week == week_number) %>%
+                          group_by(game_id) %>%
+                          summarise(home_team = home_team,
+                                    away_team = away_team,
+                                    home_score = home_score,
+                                    away_score = away_score,
+                                    total_line = total_line,
+                                    spread_line = spread_line,
+                                    total = total,
+                                    result = result
+                          ) %>%
+                          unique()
+
+#find the row of the data for the completed games
+WHERE THE FUCK IS PITTSBURGH V SEATTLE!!!!
+
+#Use models to see how accurate point prediction would have been for each game
+compare_df <- full_join(all_predictions, games_for_correct_week, by = "game_id") 
+#compare_df <- compare_df[!is.na(compare_df$home_team.x),]
+#initialize columns
+# compare_df$home_score <- NA
+# compare_df$away_score <- NA
+# compare_df$total_line <- NA
+# compare_df$spread_line <- NA
+# compare_df$total <- NA
+# compare_df$result <- NA
+# 
+# for(i in 1:length(completed_games)){
+#   correct_row <- completed_games[i] #find out the index of the completed game, then populate compare_df with the correct information
+#   
+#   compare_df$total_line[correct_row] <- games_for_correct_week$total_line[i]
+#   compare_df$spread_line[correct_row] <- games_for_correct_week$spread_line[i]
+#   compare_df$total[correct_row] <- games_for_correct_week$total[i]
+#   compare_df$result[correct_row] <- games_for_correct_week$result[i]
+#   compare_df$home_score[correct_row] <- games_for_correct_week$home_score[i]
+#   compare_df$away_score[correct_row] <- games_for_correct_week$away_score[i]
+# }
+
+#Do some transformations to easily compare the predictions to reality
+
+compare_df$predicted_winner <- ifelse(compare_df$home_prediction > compare_df$away_prediction,
+                                      compare_df$home_team,
+                                      compare_df$away_team)
+
+compare_df$winner <- ifelse(compare_df$result > 0,
+                            compare_df$home_team,
+                            compare_df$away_team)
+
+compare_df$correct_prediction <- ifelse(compare_df$predicted_winner == compare_df$winner,
+                                        TRUE,
+                                        FALSE)
+
+compare_df$predicted_total <- compare_df$home_prediction + compare_df$away_prediction
+
+compare_df$predicted_over <- ifelse(compare_df$predicted_total > compare_df$total_line,
+                                    TRUE,
+                                    FALSE)
+
+compare_df$predicted_under <- ifelse(compare_df$predicted_total < compare_df$total_line,
+                                    TRUE,
+                                    FALSE)
+
+compare_df$over <- compare_df$total > compare_df$total_line
+
+compare_df$under <- compare_df$total < compare_df$total_line
+
+compare_df$correct_over_under <- ifelse(compare_df$over == compare_df$predicted_over,
+                                        TRUE,
+                                        ifelse(compare_df$under == compare_df$predicted_under,
+                                               TRUE,
+                                               FALSE))
+
+compare_df$predicted_spread <- compare_df$home_prediction - compare_df$away_prediction
+
+table(compare_df$correct_prediction)
+table(compare_df$correct_over_under)
+
+
+write.csv(compare_df, paste(season, " ", week_num, "_Prediction_vs_Reality.csv", sep=""), row.names = TRUE)
+
+#Next to do - calculate if correct decision was made for spread
+
+
+
+
