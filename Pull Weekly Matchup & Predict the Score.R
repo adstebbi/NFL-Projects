@@ -42,10 +42,6 @@ official_team_names <- c('Arizona Cardinals', 'Atlanta Falcons', "Baltimore Rave
                          'New York Jets', 'Pittsburgh Steelers', 'San Francisco 49ers', 'Seattle Seahawks', 'Tampa Bay Buccaneers', 
                           'Tennessee Titans', 'Washington Football Team')
 
-
-
-
-
 scrape_weekly_games <- function(season, week_num){
   
   url <- paste0("https://www.pro-football-reference.com/years/", 2021, "/games.htm") #Pull full season's games from ProFootballReference
@@ -84,7 +80,7 @@ scrape_weekly_games <- function(season, week_num){
                                                         week_num_matchups$`Loser/tie`[i] == 'Kansas City Chiefs'       ~ "KC",
                                                         week_num_matchups$`Loser/tie`[i] == 'Las Vegas Raiders'        ~ "LV",
                                                         week_num_matchups$`Loser/tie`[i] == 'Los Angeles Chargers'     ~ "LAC",
-                                                        week_num_matchups$`Loser/tie`[i] == 'Los Angeles Rams'         ~ "LAR",
+                                                        week_num_matchups$`Loser/tie`[i] == 'Los Angeles Rams'         ~ "LA",
                                                         week_num_matchups$`Loser/tie`[i] == 'Miami Dolphins'           ~ "MIA",
                                                         week_num_matchups$`Loser/tie`[i] == 'Minnesota Vikings'        ~ "MIN",
                                                         week_num_matchups$`Loser/tie`[i] == 'New England Patriots'     ~ "NE",
@@ -120,7 +116,7 @@ scrape_weekly_games <- function(season, week_num){
                                                        week_num_matchups$`Winner/tie`[i] == 'Kansas City Chiefs'       ~ "KC",
                                                        week_num_matchups$`Winner/tie`[i] == 'Las Vegas Raiders'        ~ "LV",
                                                        week_num_matchups$`Winner/tie`[i] == 'Los Angeles Chargers'     ~ "LAC",
-                                                       week_num_matchups$`Winner/tie`[i] == 'Los Angeles Rams'         ~ "LAR",
+                                                       week_num_matchups$`Winner/tie`[i] == 'Los Angeles Rams'         ~ "LA",
                                                        week_num_matchups$`Winner/tie`[i] == 'Miami Dolphins'           ~ "MIA",
                                                        week_num_matchups$`Winner/tie`[i] == 'Minnesota Vikings'        ~ "MIN",
                                                        week_num_matchups$`Winner/tie`[i] == 'New England Patriots'     ~ "NE",
@@ -168,7 +164,6 @@ generate_data_for_modeling <- function(season, week_num){
   
   colnames(Full_Regular_Season)
   
-  
   Full_Regular_Season$def_final_score <- ifelse(Full_Regular_Season$home_team == Full_Regular_Season$defteam, 
                                                 Full_Regular_Season$away_score, 
                                                 Full_Regular_Season$home_score) #new
@@ -203,7 +198,7 @@ generate_data_for_modeling <- function(season, week_num){
   
   
   full_defense <- Full_Regular_Season %>%
-                  group_by(game_id, defteam, season, week) %>% 
+                  group_by(defteam, season, week) %>% 
                   summarize(plays = n(),
                             def_good_play_rate = (sum(epa < -0.6)/plays),
                             def_bad_play_rate = (sum(epa > 0.20)/plays),
@@ -216,6 +211,7 @@ generate_data_for_modeling <- function(season, week_num){
                             total = total,
                             result = result,
                             opponent_ppg = mean(def_final_score), #new
+                            def_epa_pp = (sum(epa)/plays),
                             home_team = home_team,
                             away_team = away_team)
   #Clean up
@@ -235,6 +231,7 @@ generate_data_for_modeling <- function(season, week_num){
   home_results$def_good_play_rate <- home_full_defense$def_good_play_rate
   home_results$def_bad_play_rate <- home_full_defense$def_bad_play_rate
   home_results$opponent_ppg <- home_full_defense$opponent_ppg #new
+  home_results$def_epa_pp <- home_full_defense$def_epa_pp
   
   #Clean up NAs
   home_full_defense$def_interceptions[is.na(home_full_defense$def_interceptions)] <- 0
@@ -247,6 +244,7 @@ generate_data_for_modeling <- function(season, week_num){
   away_results$def_good_play_rate <- away_full_defense$def_good_play_rate
   away_results$def_bad_play_rate <- away_full_defense$def_bad_play_rate
   away_results$opponent_ppg <- away_full_defense$opponent_ppg #new
+  away_results$def_epa_pp <- away_full_defense$def_epa_pp
   
   #Clean up NAs
   away_full_defense$def_interceptions[is.na(away_full_defense$def_interceptions)] <- 0
@@ -262,7 +260,7 @@ generate_data_for_modeling <- function(season, week_num){
 
 #Set the season, week number to predict here
 season <- "2021"
-week_number <- 11
+week_number <- 12
 All_season <- generate_data_for_modeling(season, week_number)
 
 #Do not attempt to set variables for inaccurately generated datasets
@@ -304,6 +302,7 @@ final_summary <- all_results %>%
                                 series_success = mean(series_success),
                                 cpoe = mean(cpoe),
                                 opponent_ppg = mean(opponent_ppg), #new
+                                def_epa_pp = mean(def_epa_pp),
                                 avg_yardline = mean(avg_yardline),
                                 def_interceptions = sum(def_interceptions),
                                 def_fumbles = sum(def_fumbles),
@@ -332,6 +331,7 @@ final_summary[is.na(final_summary)] <- 0
                          explosive_play_rate = NA, 
                          bad_play_rate = NA,
                          opponent_ppg = NA, #new
+                         def_epa_pp = NA,
                          avg_wpa = NA,
                          series_success = NA,
                          cpoe = NA,
@@ -381,6 +381,7 @@ final_summary[is.na(final_summary)] <- 0
                                 explosive_play_rate = final_summary$explosive_play_rate[team_index],
                                 bad_play_rate = final_summary$bad_play_rate[team_index],
                                 opponent_ppg = final_summary$opponent_ppg[team_index], #new
+                                def_epa_pp = final_summary$def_epa_pp[team_index],
                                 def_interceptions = final_summary$def_interceptions[team_index],
                                 def_fumbles = final_summary$def_fumbles[team_index],
                                 def_good_play_rate = final_summary$def_good_play_rate[team_index],
@@ -416,6 +417,7 @@ final_summary[is.na(final_summary)] <- 0
                          explosive_play_rate = final_summary$explosive_play_rate[team_index],
                          bad_play_rate = final_summary$bad_play_rate[team_index],
                          opponent_ppg = final_summary$opponent_ppg[team_index], #new
+                         def_epa_pp = final_summary$def_epa_pp[team_index],
                          def_interceptions = final_summary$def_interceptions[team_index],
                          def_fumbles = final_summary$def_fumbles[team_index],
                          def_good_play_rate = final_summary$def_good_play_rate[team_index],
@@ -431,9 +433,9 @@ away_test <- away_test[-1, colnames(away_test) != "team"]
 home_model <- lm(home_score ~
                    off_epa_play + off_total_epa + off_success_rate +
                    explosive_play_rate + bad_play_rate + avg_wpa +
-                   def_interceptions + def_fumbles + cpoe +
+                   def_interceptions + def_fumbles + cpoe - def_epa_pp +
                    def_good_play_rate - def_bad_play_rate -
-                   off_interceptions - off_fumbles - opponent_ppg,
+                   off_interceptions - off_fumbles - opponent_ppg , #new
                  data = home_train)
 
 home_predictions <- predict(home_model, newdata = home_test)
@@ -442,7 +444,7 @@ home_predictions <- predict(home_model, newdata = home_test)
 away_model <- lm(away_score ~
                    off_epa_play + off_total_epa + off_success_rate +
                    explosive_play_rate + bad_play_rate + avg_wpa +
-                   def_interceptions + def_fumbles + cpoe +
+                   def_interceptions + def_fumbles + cpoe - def_epa_pp +
                    def_good_play_rate - def_bad_play_rate -
                    off_interceptions - off_fumbles - opponent_ppg, #new
                  data = away_train)
@@ -453,7 +455,7 @@ away_predictions <- predict(away_model, newdata = away_test)
 home_fit <- lm(home_score ~
                  off_epa_play + off_total_epa + off_success_rate +
                  explosive_play_rate + bad_play_rate + avg_wpa +
-                 def_interceptions + def_fumbles + cpoe +
+                 def_interceptions + def_fumbles + cpoe - def_epa_pp +
                  def_good_play_rate - def_bad_play_rate -
                  off_interceptions - off_fumbles - opponent_ppg, #new
                data = home_results)
@@ -461,14 +463,14 @@ home_fit <- lm(home_score ~
 home_preds <- predict(home_fit, home_test) %>%
               as_tibble() %>%
               rename(home_prediction = value) %>%
-              mutate(home_prediction = home_prediction - 5) %>%
+              #mutate(home_prediction = home_prediction - 5) %>%
               round(1) %>%
               cbind(home_test) %>%
               select(posteam, game_id, plays, off_success_rate, season,
                      week, avg_wpa, cpoe, off_epa_play, off_total_epa,
                      explosive_play_rate, bad_play_rate, def_interceptions,
                      def_fumbles, def_good_play_rate, def_bad_play_rate, opponent_ppg, #new
-                     off_interceptions, off_fumbles, home_prediction)
+                     def_epa_pp, off_interceptions, off_fumbles, home_prediction)
 
 home_preds <- home_preds %>%
                rename(home_team = posteam)%>%
@@ -477,7 +479,7 @@ home_preds <- home_preds %>%
 away_fit <- lm(away_score ~
                  off_epa_play + off_total_epa + off_success_rate +
                  explosive_play_rate + bad_play_rate + avg_wpa +
-                 def_interceptions + def_fumbles + cpoe +
+                 def_interceptions + def_fumbles + cpoe - def_epa_pp +
                  def_good_play_rate - def_bad_play_rate -
                  off_interceptions - off_fumbles - opponent_ppg, #new
                data = away_results)
@@ -485,14 +487,14 @@ away_fit <- lm(away_score ~
 away_preds <- predict(away_fit, away_test) %>%
               as_tibble() %>%
               rename(away_prediction = value) %>%
-              mutate(away_prediction = away_prediction - 5) %>%
+              #mutate(away_prediction = away_prediction - 5) %>%
               round(1) %>%
               bind_cols(away_test) %>%
               select(posteam, game_id, plays, off_success_rate, season,
                      week, avg_wpa, cpoe, off_epa_play, off_total_epa,
                      explosive_play_rate, bad_play_rate, def_interceptions,
-                     def_fumbles, def_good_play_rate, def_bad_play_rate, opponent_ppg,
-                     off_interceptions, off_fumbles, away_prediction) 
+                     def_fumbles, def_good_play_rate, def_bad_play_rate, opponent_ppg, #new
+                     def_epa_pp, off_interceptions, off_fumbles, away_prediction) 
 
 away_preds <- away_preds %>%
                 rename(away_team = posteam) %>%
@@ -502,14 +504,13 @@ away_preds <- away_preds %>%
 
 all_predictions <- full_join(home_preds, away_preds, by="game_id")
 
-
 all_predictions %>%
   select(team_logo_espn.x, home_team, home_prediction, away_prediction, away_team,  team_logo_espn.y) %>%
   gt() %>% # Make a unique table
-  tab_options(table.border.top.color = "white",
+  tab_options(table.border.top.color = "black",
               row.striping.include_table_body = TRUE) %>% # Set top border color, along with if rows should be stripped or not
   tab_header(title = md(paste0("Week ", week_num, " Predicted Scores"))) %>% # Set title
-  tab_source_note(source_note = "SOURCE: nflfastR")  %>% # Set footer
+  tab_source_note(source_note = "SOURCE: nflfastR, Pro Football Reference")  %>% # Set footer
   cols_label(team_logo_espn.x = " ",
               home_team = "HOME TEAM",
               home_prediction = "PREDICTED HOME SCORE",
@@ -564,29 +565,41 @@ games_for_correct_week <- readRDS(url(paste0("https://raw.githubusercontent.com/
                           unique()
 
 #find the row of the data for the completed games
-WHERE THE FUCK IS PITTSBURGH V SEATTLE!!!!
+
+
+
+
+####FIX BELOW TO GET PREVIOUS WEEK RECORDS!!!!!
+
+!!!
+  !!!
+  
+  
+  !
+  
+  !!!!!!!^^^^
 
 #Use models to see how accurate point prediction would have been for each game
 compare_df <- full_join(all_predictions, games_for_correct_week, by = "game_id") 
-#compare_df <- compare_df[!is.na(compare_df$home_team.x),]
+compare_df <- compare_df[!is.na(compare_df$home_team.x),]
 #initialize columns
-# compare_df$home_score <- NA
-# compare_df$away_score <- NA
-# compare_df$total_line <- NA
-# compare_df$spread_line <- NA
-# compare_df$total <- NA
-# compare_df$result <- NA
-# 
-# for(i in 1:length(completed_games)){
-#   correct_row <- completed_games[i] #find out the index of the completed game, then populate compare_df with the correct information
-#   
-#   compare_df$total_line[correct_row] <- games_for_correct_week$total_line[i]
-#   compare_df$spread_line[correct_row] <- games_for_correct_week$spread_line[i]
-#   compare_df$total[correct_row] <- games_for_correct_week$total[i]
-#   compare_df$result[correct_row] <- games_for_correct_week$result[i]
-#   compare_df$home_score[correct_row] <- games_for_correct_week$home_score[i]
-#   compare_df$away_score[correct_row] <- games_for_correct_week$away_score[i]
-# }
+compare_df$home_score <- NA
+compare_df$away_score <- NA
+compare_df$total_line <- NA
+compare_df$spread_line <- NA
+compare_df$total <- NA
+compare_df$result <- NA
+
+for(i in 1:length(completed_games)){
+  correct_row <- completed_games[i] #find out the index of the completed game, then populate compare_df with the correct information
+
+  compare_df$total_line[correct_row] <- games_for_correct_week$total_line[i]
+  compare_df$spread_line[correct_row] <- games_for_correct_week$spread_line[i]
+  compare_df$total[correct_row] <- games_for_correct_week$total[i]
+  compare_df$result[correct_row] <- games_for_correct_week$result[i]
+  compare_df$home_score[correct_row] <- games_for_correct_week$home_score[i]
+  compare_df$away_score[correct_row] <- games_for_correct_week$away_score[i]
+}
 
 #Do some transformations to easily compare the predictions to reality
 
@@ -632,6 +645,18 @@ write.csv(compare_df, paste(season, " ", week_num, "_Prediction_vs_Reality.csv",
 
 #Next to do - calculate if correct decision was made for spread
 
-
+# 
+# graph_data <- full_defense %>%
+#   group_by(defteam) %>%
+#   summarise(defteam = defteam,
+#             def_epa_pp = mean(def_epa_pp)) %>%
+#   unique() %>% 
+#   arrange(.$def_epa_pp)
+# 
+# 
+# 
+# 
+# ggplot(data = graph_data, mapping = aes(x = reorder(defteam, def_epa_pp, sum), y = def_epa_pp)) +
+#   geom_col()
 
 
